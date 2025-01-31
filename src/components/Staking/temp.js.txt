@@ -1,0 +1,491 @@
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import * as anchor from "@project-serum/anchor";
+import * as token from "@solana/spl-token";
+import { useAppKitAccount } from '@reown/appkit/react'; // Changed from useWallet
+import { clusterApiUrl, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Z01ZET_DECIMALS } from "../../contracts/tokenstaking/constants"
+
+import {
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  getAssociatedTokenAddressSync,
+  getAccount,
+} from "@solana/spl-token";
+
+import {
+  stake,
+  unstake,
+  compound,
+  claim,
+  getTokenFromType,
+  getMyStakedAndReward,
+  getStakingAPY
+} from "../../contracts/tokenstaking/web3";
+import Button from "../Button";
+import StatItem from "../StatItem";
+import PlusMinusButton from "./PlusMinusButton";
+import StakingSummaryItem from "./StakingSummaryItem";
+import { PublicKey } from "@solana/web3.js";
+import { useAppKitConnection } from '@reown/appkit-adapter-solana/react';
+import { useAppKitProvider } from '@reown/appkit/react';
+import type { Provider } from '@reown/appkit-adapter-solana/react';
+import { Transaction } from "@solana/web3.js";
+import { SystemProgram } from "@solana/web3.js";
+// import { Connection } from "@solana/web3.js";
+
+
+
+
+const SOLANA_HOST = "https://mainnet.helius-rpc.com/?api-key=ad83cc9c-52a4-4ad4-8b6e-d96fd392c9d5";
+// const connection = new anchor.web3.Connection(SOLANA_HOST);
+
+const TokenStakingSection = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [totalStaking, setTotalStaking] = useState(250000);
+  const [stakeAmount, setStakeAmount] = useState(0);
+  const [stakedAmount, setStakedAmount] = useState(0);
+  const [totalStaked, setTotalStaked] = useState(0);
+  const [setimatedAward, setEstimatedAward] = useState(40);
+  const [price, setPrice] = useState(0.13);
+  const [tokenprice, setTokenPrice] = useState(0.0001);
+  const [dailyReward, setDailyReward] = useState(0.13);
+  const [totalSupply, setTotalSupply] = useState(1000000);
+  const [unStakeAmount, setUnStakeAmount] = useState(0);
+  const [rewards, setRewards] = useState(0);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [tokenMint, setTokenMint] = useState('');
+  const [dataUpdate, setDataUpdate] = useState(false);
+  const [userAta_balance, setUserAta_balance] = useState(0);
+  const [myStakedTime, setMyStakedTime] = useState(0);
+  const [myRefReward, setMyRefReward] = useState(0);
+  const [stakingAPY, setStakingAPY] = useState('');
+  const [isStaking, setIsStaking] = useState(false);
+  const [solBalance, setSolBalance] = useState(0);
+  const [stakingStartTime, setStakingStartTime] = useState(0);
+
+
+  const { walletProvider } = useAppKitProvider<Provider>('solana');
+  
+  const { isConnected, address } = useAppKitAccount();
+  const { connection } = useAppKitConnection();
+
+  // const { publicKey, signTransaction, signAllTransactions } = useAppKitAccount();
+  const STAKE_WALLET_ADDRESS = "5KyiTnuXdPXSaApMb9MkoRs2fJhJVUphoBr5MqU4JYcB";
+  const APY = 40; // 40% APY
+
+  
+
+  // Function to fetch SOL balance
+  const fetchSolBalance = useCallback(async () => {
+    if (!isConnected || !address || !connection) return;
+
+    try {
+      const wallet = new PublicKey(address);
+      const balance = await connection.getBalance(wallet);
+      setSolBalance(balance / LAMPORTS_PER_SOL);
+    } catch (error) {
+      console.error("Error fetching SOL balance:", error);
+    }
+  }, [connection, isConnected, address]);
+
+  // Auto-fetch balance
+  useEffect(() => {
+    fetchSolBalance();
+    const intervalId = setInterval(fetchSolBalance, 30000);
+    return () => clearInterval(intervalId);
+  }, [fetchSolBalance]);
+
+  // Handle stake transaction
+  const handleStake = async () => {
+    if (!isConnected || !address || stakeAmount <= 0) return;
+
+    try {
+      setIsStaking(true);
+      const wallet = new PublicKey(address);
+      const stakingWallet = new PublicKey(STAKE_WALLET_ADDRESS);
+      const lamports = stakeAmount * LAMPORTS_PER_SOL;
+      const { connection } = useAppKitConnection();
+
+
+      const latestBlockhash = await connection?.getLatestBlockhash();
+
+      const transaction = new Transaction({
+        feePayer: wallet,
+        recentBlockhash: latestBlockhash?.blockhash,
+      }).add(
+        SystemProgram.transfer({
+          fromPubkey: wallet,
+          toPubkey: stakingWallet,
+          lamports,
+        })
+      );
+
+      const signature = await walletProvider.sendTransaction(transaction, connection! );
+      console.log("Stake Transaction Signature:", signature);
+
+      // Refresh balance after successful stake
+      await fetchSolBalance();
+      setStakeAmount(0); // Reset stake amount
+      
+      // You can add a success notification here
+      alert("Stake successful!");
+
+    } catch (error) {
+      console.error("Staking error:", error);
+      alert("Failed to stake. Please try again.");
+    } finally {
+      setIsStaking(false);
+    }
+  };
+
+// useEffect(() => {
+//   const interval = setInterval(() => {
+//     fetchBalance();
+//     (async () => {
+//       const [amount, reward_amount, time] = await getMyStakedAndReward(
+//         { publicKey, signTransaction }, // Modified wallet parameter
+//         tokenMint
+//       );
+//       console.log("amount-frontend", amount);
+//       console.log("reward_amount-frontend", reward_amount);
+//       setStakedAmount(amount);
+//       setMyRefReward(reward_amount);
+//       setMyStakedTime(time);
+//     })();
+//   }, 4000);
+
+//   return () => clearInterval(interval);
+// });
+
+
+  // useEffect(() => {
+  //   if (!publicKey) {
+  //     setStakedAmount(0);
+  //     setRewards(0);
+  //     return;
+  //   }
+  //   setTokenMint(getTokenFromType());
+  //   (async () => {
+  //     const [amount, reward_amount, time] = await getMyStakedAndReward(PublicKey, tokenMint);
+  //     console.log("amount-frontend", amount);
+  //     console.log("reward_amount-frontend", reward_amount);
+  //     setStakedAmount(amount);
+  //     setMyRefReward(reward_amount);
+  //     setMyStakedTime(time);
+  //   })();
+  // }, [publicKey, dataUpdate]);
+  // useEffect(() => {
+  //   setTimeout(() => {
+  //     console.log("timer");
+  //     // fetchBalance();
+  //     // getReward();
+  //   }, 1000);
+  // }, []);
+  // setTimeout(() => {
+  //   if (stakedAmount == undefined)
+  //     return;
+  //   const currentTime = new Date();
+  //   const unixTimestamp = Math.floor(currentTime.getTime() / 1000);
+  //   const reward_amount_t = myRefReward + stakedAmount * (unixTimestamp - myStakedTime) / (365 * 24 * 3600) * parseInt(stakingAPY) / 100;
+  //   console.log("reward_amount_t", reward_amount_t);
+  //   setRewards(reward_amount_t.toFixed(5));
+  // }, 1000);
+
+  const intervalId = setInterval(() => {
+    const currentTime = Math.floor(Date.now() / 1000);
+    const timeElapsed = currentTime - stakingStartTime;
+    const annualSeconds = 365 * 24 * 3600;
+    
+    // Calculate rewards: (stakedAmount * APY * timeElapsed) / (annual seconds)
+    const rewardAmount = (stakedAmount * APY * timeElapsed) / (100 * annualSeconds);
+    setRewards(parseFloat(rewardAmount.toFixed(5)));
+  }, 1000);
+
+  return () => clearInterval(intervalId);
+}, [stakedAmount, stakingStartTime];
+
+  // const onStake = async () => {
+  //   let referral = getRef();
+  //   if (referral === null) referral = publicKey.toString(); // Changed from wallet.publicKey
+  //   try {
+  //     let txHash = await stake(
+  //       { publicKey, signTransaction }, // Modified wallet parameter
+  //       stakeAmount,
+  //       tokenMint,
+  //       referral
+  //     );
+  //   } catch (e) {
+  //     console.error(e);
+  //   }
+  // };
+
+  // const onUnstake = async () => {
+  //   try {
+  //     await unstake({ publicKey, signTransaction }, tokenMint); // Modified wallet parameter
+  //     setDataUpdate(!dataUpdate)
+  //   } catch (e) {
+  //     console.error(e);
+  //   }
+  // };
+
+    // Function to check if minimum staking period has passed
+    const [minimumStakingPeriod] = useState(24 * 60 * 60); // 24 hours in seconds
+    const { connection } = useAppKitConnection();
+
+    const latestBlockhash = await connection?.getLatestBlockhash();
+    const canUnstake = () => {
+      const currentTime = Math.floor(Date.now() / 1000);
+      return currentTime - stakingStartTime >= minimumStakingPeriod;
+    };
+  
+    // Handle unstake transaction
+    const { isConnected, address } = useAppKitAccount();
+    const [isUnstaking, setIsUnstaking] = useState(false);
+
+    const handleUnstake = async () => {
+      if (!isConnected || !address || stakedAmount <= 0) return;
+      
+      try {
+        // Check minimum staking period
+        if (!canUnstake()) {
+          const hoursLeft = Math.ceil((minimumStakingPeriod - (Math.floor(Date.now() / 1000) - stakingStartTime)) / 3600);
+          alert(`Cannot unstake yet. Please wait ${hoursLeft} more hours.`);
+          return;
+        }
+  
+        setIsUnstaking(true);
+        const wallet = new PublicKey(address);
+        
+        // Calculate total amount to return (staked + rewards)
+        const [rewards, setRewards] = useState(0);
+
+        const totalUnstakeAmount = stakedAmount + rewards;
+        const lamports = Math.floor(totalUnstakeAmount * LAMPORTS_PER_SOL);
+  
+        const connection = useAppKitConnection();
+
+        const latestBlockhash = await connection.getLatestBlockhash();
+  
+        // Create transaction to return funds from staking wallet to user
+        const STAKE_WALLET_ADDRESS = "5KyiTnuXdPXSaApMb9MkoRs2fJhJVUphoBr5MqU4JYcB";
+        const transaction = new Transaction({
+          feePayer: new PublicKey(STAKE_WALLET_ADDRESS),
+          recentBlockhash: latestBlockhash.blockhash,
+        }).add(
+          SystemProgram.transfer({
+            fromPubkey: new PublicKey(STAKE_WALLET_ADDRESS),
+            toPubkey: wallet,
+            lamports,
+          })
+        );
+  
+        const { walletProvider } = useAppKitProvider<Provider>('solana');
+
+        
+        const signature = await walletProvider.sendTransaction(transaction, connection);
+        console.log("Unstake Transaction Signature:", signature);
+  
+        // Reset staking state
+        setStakedAmount(0);
+        setStakingStartTime(0);
+        setRewards(0);
+        
+        // Refresh balance
+        await fetchSolBalance();
+        
+        alert("Unstake successful! Your funds have been returned to your wallet.");
+  
+      } catch (error) {
+        console.error("Unstaking error:", error);
+        alert("Failed to unstake. Please try again.");
+      } finally {
+        setIsUnstaking(false);
+      }
+    };
+
+  const onClaim = async () => {
+    try {
+      await claim({ publicKey, signTransaction }, tokenMint); // Modified wallet parameter
+      setDataUpdate(!dataUpdate)
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const onCompound = async () => {
+    try {
+      let txHash = await compound({ publicKey, signTransaction }, tokenMint); // Modified wallet parameter
+      console.log("onCompound", txHash);
+      setDataUpdate(!dataUpdate);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+    const getRef = () => {
+    const ref = searchParams.get("ref");
+    return ref;
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="w-full flex flex-col gap-3 dark:bg-lightBrown bg-white shadow-custom rounded-xl p-4 dark:text-white text-title-light ">
+        <div className="flex flex-row items-center justify-start my-6 dark:text-white text-title-light gap-4">
+          <img
+            className="w-14 hidden dark:flex"
+            alt=""
+            src="/icons/logo1.svg"
+          />
+          <img
+            className="w-14 dark:hidden flex"
+            alt=""
+            src="/icons/logo1-light.svg"
+          />
+          <h1 className="text-2xl font-semibold">N01ZET Staking</h1>
+        </div>
+        <div className="flex justify-between">
+          <div className="w-2/5 flex flex-col gap-6 ">
+            <p>Available In Wallet</p>
+            <div className="flex flex-row justify-between">
+              <p>{userAta_balance}</p>
+              <button
+                onClick={() => setStakeAmount(walletBalance)}
+                className="underline text-[#FB9037]"
+              >
+                Max
+              </button>
+            </div>
+
+            <div className="flex flex-row justify-between items-center gap-x-1">
+              <PlusMinusButton
+                value="-"
+                onClick={() => setStakeAmount((prev) => Math.max(prev - 1, 0))}
+              />
+
+              <input
+                type="number"
+                value={stakeAmount}
+                min={0}
+                onChange={(e) => setStakeAmount(parseInt(e.target.value))}
+                className="w-24 grow h-12 text-center bg-transparent rounded border-2 border-[#9D8B70]"
+              />
+              <PlusMinusButton
+                value="+"
+                onClick={() =>
+                  setStakeAmount((stakeAmount) =>
+                    Math.min(stakeAmount + 1, totalStaking)
+                  )
+                }
+              />
+            </div>
+            <div className="h-11">
+              <Button text="Stake" onClick={onStake} />
+            </div>
+          </div>
+
+          <div className="w-2/5 flex flex-col gap-6 ">
+            <p>Total Staked</p>
+            <div className="flex flex-row justify-between">
+              <p>{stakedAmount}</p>
+              {/* <button
+                onClick={() => setUnStakeAmount(stakedAmount)}
+                className="underline text-[#FB9037]"
+              >
+                Max
+              </button> */}
+            </div>
+            {/* <div className="flex flex-row justify-between  items-center gap-x-1 w-full ">
+              <PlusMinusButton
+                value="-"
+                onClick={() =>
+                  setUnStakeAmount((prev) => Math.max(prev - 1, 0))
+                }
+              />
+              <input
+                type="number"
+                value={unStakeAmount}
+                max={stakedAmount}
+                min={0}
+                onChange={(e) => setUnStakeAmount(parseInt(e.target.value))}
+                className="w-24 grow h-12 text-center bg-transparent rounded border-2 border-[#9D8B70]"
+              />
+              <PlusMinusButton
+                value="+"
+                onClick={() =>
+                  setUnStakeAmount((prev) => Math.min(prev + 1, stakedAmount))
+                }
+              />
+            </div> */}
+            <div className="h-11">
+              <Button
+                text="Unstake"
+                disabled={stakedAmount > 0 ? false : true}
+                onClick={onUnstake}
+              />
+            </div>
+            <div className="h-11">
+              <Button
+                text="Compound"
+                className="px-10"
+                onClick={onCompound}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center ">
+          <p>Pending Rewards: {rewards}</p>
+
+          <div className="w-24 h-11">
+            <Button
+              text="Claim"
+              iconSrc="/icons/download.svg"
+              className="px-10"
+              onClick={onClaim}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="w-full flex flex-col gap-3">
+        <div className="grid lg:grid-cols-2 grid-cols-1 gap-3">
+          <div className="w-full ">
+            <StatItem
+              value={`${totalStaking} AZLs`}
+              title="Total Staking"
+            // info="/icons/info.svg"
+            />
+          </div>
+          <div className="w-full">
+            <StatItem
+              value={`${setimatedAward}% APR`}
+              title="Estimated Award"
+            // info="/icons/info.svg"
+            />
+          </div>
+        </div>
+        <div className="w-full h-full flex flex-col gap-3 dark:bg-lightBrown bg-white shadow-custom rounded-xl p-6 ">
+          <h2 className="font-semibold pb-6 dark:text-white text-title-light">
+            Staking Summary
+          </h2>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
+            <StakingSummaryItem title="N01ZET Price" value={`$${tokenprice}`} />
+            <StakingSummaryItem
+              title="Daily Rewards"
+              value={`${dailyReward} %`}
+            // info={true}
+            />
+            <StakingSummaryItem
+              title="Total Supply"
+              value={`${totalSupply} AZLs`}
+            // info={true}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default TokenStakingSection;
+
+
