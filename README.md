@@ -1,6 +1,8 @@
 # Appkit-stake-sol on Solana
 
-Demo link: https://appkit-stake-sol.vercel.app/
+Demo link: [https://appkit-six.vercel.app/](https://appkit-six.vercel.app/)
+
+Backup repo: [github.com/Afoxcute/appkit-stake-sol](https://github.com/Afoxcute/appkit-stake-sol)
 
 This is a decentralized Staking & vesting dapp built on the Solana Devnet network. The application allows users to stake and vest SOL all while ensuring transparency and fairness through blockchain technology.
 
